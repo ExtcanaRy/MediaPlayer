@@ -31,7 +31,7 @@ on:
       rel_tag:
         description: 'Release Tag'     
         required: false
-        default: 'v'
+        default: ''
         type: string
       rel_desc_body:
         description: 'Release Description Body'     
@@ -52,10 +52,10 @@ jobs:
 
           echo "build_time=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
 
-          echo "tag_name=${{ inputs.rel_tag }}" >> $GITHUB_OUTPUT
+          echo "tag_name=v${{ inputs.rel_tag }}" >> $GITHUB_OUTPUT
           
           if [ -z "${{ inputs.rel_title }}" ]; then
-            echo "title=${{ inputs.rel_tag }}" >> $GITHUB_OUTPUT
+            echo "title=v${{ inputs.rel_tag }}" >> $GITHUB_OUTPUT
           else
             echo "title=${{ inputs.rel_title }}" >> $GITHUB_OUTPUT
           fi
@@ -89,7 +89,7 @@ jobs:
       - name: Zip Release
         uses: TheDoctor0/zip-release@0.7.1
         with:
-          filename: MediaPlayer_${{ steps.rel_info.outputs.tag_name }}.zip
+          filename: MediaPlayer_v${{ steps.rel_info.outputs.tag_name }}.zip
           path: .
           directory: release
 
@@ -109,4 +109,40 @@ jobs:
           prerelease: ${{ inputs.pre_release }}
           body: ${{ steps.rel_info.outputs.desc_body }}
           files: |
-            ./release/MediaPlayer_${{ steps.rel_info.outputs.tag_name }}.zip
+            ./release/MediaPlayer_v${{ steps.rel_info.outputs.tag_name }}.zip
+
+      - name: Checkout tooth
+        uses: actions/checkout@v4.0.0
+        if: inputs.release
+        with:
+          path: 'tooth'
+          repository: 'ExtcanaRy/MediaPlayer-tooth'
+          fetch-depth: 0
+
+      - name: Update tooth files
+        if: inputs.release
+        run: |
+          cp ./release/MediaPlayer.dll ./tooth/
+          cp ./release/MediaPlayer.pdb ./tooth/
+          cp ./release/MediaPlayer/video/convert.exe ./tooth/
+          $out = Get-Content -Path "tooth/tooth.json" | ForEach-Object { $_ -replace '"version": ".*"', '"version": "${{ steps.rel_info.outputs.tag_name }}"' }
+          $out | Out-File -FilePath "tooth/tooth.json"
+
+      - uses: actions/checkout@v4
+        if: inputs.release
+      - run: |
+          cd tooth
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .
+          git commit -m "v${{ steps.rel_info.outputs.tag_name }}"
+          git push
+
+      - name: Release tooth
+        uses: softprops/action-gh-release@v0.1.15
+        if: inputs.release
+        with:
+          repository: 'ExtcanaRy/MediaPlayer-tooth'
+          tag_name: v${{ steps.rel_info.outputs.tag_name }}
+          name: v${{ steps.rel_info.outputs.tag_name }}
+          body: v${{ steps.rel_info.outputs.tag_name }}
